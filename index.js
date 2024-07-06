@@ -108,7 +108,7 @@ bot.on('message', async (msg) => {
         // List watchlist command
         if (watchlist[chatId].length > 0) {
             const watchlistMessage = watchlist[chatId].map(item =>
-                `${item.courseName} section ${item.section}`
+                `${item.courseName}.${item.section}`
             ).join('\n');
             bot.sendMessage(chatId, `Current watchlist:\n${watchlistMessage}`);
         } else {
