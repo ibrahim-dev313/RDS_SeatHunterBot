@@ -1,4 +1,7 @@
+
+
 import cheerio from 'cheerio';
+import fs from 'fs';
 import fetch from 'node-fetch';
 import TelegramBot from 'node-telegram-bot-api';
 
@@ -9,11 +12,21 @@ const bot = new TelegramBot(token, { polling: true });
 // URL of the NSU course list page
 const url = 'https://rds2.northsouth.edu/index.php/common/showofferedcourses';
 
-// Your chat ID
-let chatId = null;
+// Maintain a watchlist of monitored courses and sections for each user
+let watchlist = {};
 
-// Maintain a watchlist of monitored courses and sections
-let watchlist = [];
+// Function to save the watchlist to a file
+function saveWatchlist() {
+    fs.writeFileSync('watchlist.json', JSON.stringify(watchlist, null, 2));
+}
+
+// Function to load the watchlist from a file
+function loadWatchlist() {
+    if (fs.existsSync('watchlist.json')) {
+        const data = fs.readFileSync('watchlist.json');
+        watchlist = JSON.parse(data);
+    }
+}
 
 // Function to scrape the website with retry logic
 async function scrapeWebsiteWithRetry() {
@@ -58,15 +71,20 @@ async function sendMessageBasedOnAvailability(desiredCourse, desiredSection, ava
 
 // Listen for messages to manage watchlist
 bot.on('message', async (msg) => {
-    chatId = msg.chat.id;
+    const chatId = msg.chat.id;
     const text = msg.text.toUpperCase(); // Convert text to uppercase
+
+    if (!watchlist[chatId]) {
+        watchlist[chatId] = [];
+    }
 
     if (text.startsWith('+')) {
         // Add to watchlist command, e.g., +ACT320.1
         const [, inputCourseAndSection] = text.split('+');
         const [inputCourse, inputSection] = inputCourseAndSection.split('.');
         if (inputCourse && inputSection) {
-            watchlist.push({ courseName: inputCourse, section: inputSection });
+            watchlist[chatId].push({ courseName: inputCourse, section: inputSection });
+            saveWatchlist();
             bot.sendMessage(chatId, `Added ${inputCourse} section ${inputSection} to watchlist.`);
         } else {
             bot.sendMessage(chatId, `Invalid format. Please use +CourseName.SectionNumber.`);
@@ -77,9 +95,10 @@ bot.on('message', async (msg) => {
         const [, inputCourseAndSection] = text.split('-');
         const [inputCourse, inputSection] = inputCourseAndSection.split('.');
         if (inputCourse && inputSection) {
-            watchlist = watchlist.filter(item =>
+            watchlist[chatId] = watchlist[chatId].filter(item =>
                 !(item.courseName === inputCourse && item.section === inputSection)
             );
+            saveWatchlist();
             bot.sendMessage(chatId, `Removed ${inputCourse} section ${inputSection} from watchlist.`);
         } else {
             bot.sendMessage(chatId, `Invalid format. Please use -CourseName.SectionNumber.`);
@@ -87,8 +106,8 @@ bot.on('message', async (msg) => {
 
     } else if (text === '/LIST') {
         // List watchlist command
-        if (watchlist.length > 0) {
-            const watchlistMessage = watchlist.map(item =>
+        if (watchlist[chatId].length > 0) {
+            const watchlistMessage = watchlist[chatId].map(item =>
                 `${item.courseName} section ${item.section}`
             ).join('\n');
             bot.sendMessage(chatId, `Current watchlist:\n${watchlistMessage}`);
@@ -99,45 +118,48 @@ bot.on('message', async (msg) => {
     } else if (text === '/HELP') {
         // Help command
         const helpMessage = `
-        **NSU Course Availability Notifier Bot Commands:**
+**NSU Course Availability Notifier Bot Commands:**
 
-        **Add to Watchlist:**
-        \`+CourseName.SectionNumber\`
-        Example: \`+ACT320.1\`
+**Add to Watchlist:**
+\`+CourseName.SectionNumber\`
+Example: \`+ACT320.1\`
 
-        **Remove from Watchlist:**
-        \`-CourseName.SectionNumber\`
-        Example: \`-ACT320.1\`
+**Remove from Watchlist:**
+\`-CourseName.SectionNumber\`
+Example: \`-ACT320.1\`
 
-        **View Watchlist:**
-        \`/list\`
+**View Watchlist:**
+\`/list\`
 
-        **Help:**
-        \`/help\`
-        `;
+**Help:**
+\`/help\`
+`;
         bot.sendMessage(chatId, helpMessage);
     } else {
         bot.sendMessage(chatId, `Invalid command. Use /help to see command usage.`);
     }
 });
 
-// Set an interval to check seat availability every 3 minutes (180000 milliseconds)
-setInterval(async () => {
-    if (chatId) {
-        try {
-            const courses = await scrapeWebsiteWithRetry();
+// Load watchlist on startup
+loadWatchlist();
 
-            for (const item of watchlist) {
+// Set an interval to check seat availability every 10 seconds (10000 milliseconds)
+setInterval(async () => {
+    try {
+        const courses = await scrapeWebsiteWithRetry();
+
+        for (const userId in watchlist) {
+            for (const item of watchlist[userId]) {
                 const matchedCourse = courses.find(course =>
                     course.courseName === item.courseName && course.section === item.section
                 );
 
                 if (matchedCourse && parseInt(matchedCourse.availableSeats) > 0) {
-                    await sendMessageBasedOnAvailability(item.courseName, item.section, matchedCourse.availableSeats);
+                    bot.sendMessage(userId, `Seats available in ${item.courseName} section ${item.section}`);
                 }
             }
-        } catch (err) {
-            console.error(`Error checking seat availability: ${err.message}`);
         }
+    } catch (err) {
+        console.error(`Error checking seat availability: ${err.message}`);
     }
 }, 10000); // Interval set to 10 seconds (10000 milliseconds)
