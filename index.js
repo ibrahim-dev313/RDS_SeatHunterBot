@@ -51,8 +51,6 @@ async function scrapeWebsiteWithRetry() {
 
 // Function to send message based on seat availability
 async function sendMessageBasedOnAvailability(desiredCourse, desiredSection, availableSeats) {
-    chatId = chatId; // Update chatId if necessary
-
     if (parseInt(availableSeats) > 0) {
         bot.sendMessage(chatId, `Seats available in ${desiredCourse} section ${desiredSection}`);
     }
@@ -62,21 +60,20 @@ async function sendMessageBasedOnAvailability(desiredCourse, desiredSection, ava
 bot.on('message', async (msg) => {
     chatId = msg.chat.id;
     const text = msg.text.toUpperCase(); // Convert text to uppercase
-    // console.log(text);
+
     if (text.startsWith('+')) {
-        // Add to watchlist command, e.g., +ACT320 1
+        // Add to watchlist command, e.g., +ACT320.1
         const [, inputCourseAndSection] = text.split('+');
         const [inputCourse, inputSection] = inputCourseAndSection.split('.');
-        console.log(inputSection);
         if (inputCourse && inputSection) {
             watchlist.push({ courseName: inputCourse, section: inputSection });
             bot.sendMessage(chatId, `Added ${inputCourse} section ${inputSection} to watchlist.`);
         } else {
-            bot.sendMessage(chatId, `Invalid format. Please use +CourseName SectionNumber.`);
+            bot.sendMessage(chatId, `Invalid format. Please use +CourseName.SectionNumber.`);
         }
 
     } else if (text.startsWith('-')) {
-        // Remove from watchlist command, e.g., -ACT320 1
+        // Remove from watchlist command, e.g., -ACT320.1
         const [, inputCourseAndSection] = text.split('-');
         const [inputCourse, inputSection] = inputCourseAndSection.split('.');
         if (inputCourse && inputSection) {
@@ -85,7 +82,7 @@ bot.on('message', async (msg) => {
             );
             bot.sendMessage(chatId, `Removed ${inputCourse} section ${inputSection} from watchlist.`);
         } else {
-            bot.sendMessage(chatId, `Invalid format. Please use -CourseName SectionNumber.`);
+            bot.sendMessage(chatId, `Invalid format. Please use -CourseName.SectionNumber.`);
         }
 
     } else if (text === '/LIST') {
@@ -99,8 +96,28 @@ bot.on('message', async (msg) => {
             bot.sendMessage(chatId, `Watchlist is empty.`);
         }
 
+    } else if (text === '/HELP') {
+        // Help command
+        const helpMessage = `
+        **NSU Course Availability Notifier Bot Commands:**
+
+        **Add to Watchlist:**
+        \`+CourseName.SectionNumber\`
+        Example: \`+ACT320.1\`
+
+        **Remove from Watchlist:**
+        \`-CourseName.SectionNumber\`
+        Example: \`-ACT320.1\`
+
+        **View Watchlist:**
+        \`/list\`
+
+        **Help:**
+        \`/help\`
+        `;
+        bot.sendMessage(chatId, helpMessage);
     } else {
-        bot.sendMessage(chatId, `Invalid command.`);
+        bot.sendMessage(chatId, `Invalid command. Use /help to see command usage.`);
     }
 });
 
@@ -123,4 +140,4 @@ setInterval(async () => {
             console.error(`Error checking seat availability: ${err.message}`);
         }
     }
-}, 180000); // Interval set to 3 minutes (180000 milliseconds)
+}, 10000); // Interval set to 10 seconds (10000 milliseconds)
