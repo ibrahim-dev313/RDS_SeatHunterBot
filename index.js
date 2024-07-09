@@ -162,4 +162,4 @@ setInterval(async () => {
     } catch (err) {
         console.error(`Error checking seat availability: ${err.message}`);
     }
-}, 10000); // Interval set to 10 seconds (10000 milliseconds)
+}, 60000); // Interval set to 10 seconds (10000 milliseconds)
